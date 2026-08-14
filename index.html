@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="수면 계산기">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0e26">
+<style>html,body{margin:0;background:#0a0e26;}</style>
+<title>수면 주기 계산기</title>
+<style>
+  :root {
+    --night-top: #0a0e26;
+    --night-bot: #151a40;
+    --ink: #ECEAF6;
+    --muted: #9aa0c4;
+    --faint: #6f76a0;
+    --luna: #a9b4ff;
+    --luna-soft: rgba(169, 180, 255, 0.14);
+    --dawn: #f6c982;
+    --dawn-soft: rgba(246, 201, 130, 0.14);
+    --card: rgba(255, 255, 255, 0.045);
+    --card-line: rgba(255, 255, 255, 0.09);
+    --radius: 20px;
+    --sans: "SF Pro Display", "SF Pro Text", -apple-system, "Segoe UI", system-ui, "Helvetica Neue", sans-serif;
+    --accent: var(--luna);
+    --accent-soft: var(--luna-soft);
+  }
+
+  * { box-sizing: border-box; }
+
+  #sky {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 34px 20px 48px;
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    background:
+      radial-gradient(120% 60% at 50% -10%, rgba(169, 180, 255, 0.10), transparent 60%),
+      transparent;
+    transition: background 0.6s ease;
+  }
+  .app[data-mode="bed"] {
+    --accent: var(--dawn);
+    --accent-soft: var(--dawn-soft);
+    background:
+      radial-gradient(130% 55% at 50% 108%, rgba(246, 201, 130, 0.13), transparent 60%),
+      transparent;
+  }
+
+  /* Header */
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .mark {
+    width: 42px; height: 42px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 14px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    transition: color 0.5s ease, background 0.5s ease;
+  }
+  .brand h1 { font-size: 1.32rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; line-height: 1.15; }
+  .brand p { font-size: 0.82rem; color: var(--muted); margin: 3px 0 0; }
+
+  /* Tabs */
+  .tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 4px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid var(--card-line);
+    border-radius: 16px;
+  }
+  .tab {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 550;
+    padding: 11px 8px;
+    border-radius: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    transition: color 0.25s ease, background 0.25s ease;
+  }
+  .tab svg { width: 17px; height: 17px; }
+  .tab[aria-selected="true"] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Input panel */
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--card-line);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--faint);
+    font-weight: 600;
+  }
+  .input-row { display: flex; gap: 10px; }
+  input[type="time"] {
+    flex: 1;
+    min-width: 0;
+    appearance: none;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--card-line);
+    border-radius: 14px;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 1.5rem;
+    font-weight: 350;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    padding: 12px 14px;
+    text-align: center;
+  }
+  input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+  input[type="time"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+
+  .now-btn {
+    flex: none;
+    appearance: none;
+    border: 1px solid var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 0.92rem;
+    font-weight: 600;
+    padding: 0 16px;
+    border-radius: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: filter 0.2s ease, transform 0.1s ease;
+  }
+  .now-btn:hover { filter: brightness(1.15); }
+  .now-btn:active { transform: scale(0.97); }
+  .now-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .app[data-mode="bed"] .now-btn { display: none; }
+
+  .hint { font-size: 0.82rem; color: var(--muted); margin: 0; line-height: 1.5; }
+
+  /* Results */
+  .results-head {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--faint);
+    font-weight: 600;
+    margin: 4px 2px -4px;
+  }
+  .results { display: flex; flex-direction: column; gap: 10px; }
+
+  .card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--card);
+    border: 1px solid var(--card-line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .card.rec {
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
+                0 8px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent);
+  }
+  .card .time {
+    font-size: 2.15rem;
+    font-weight: 250;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .card.rec .time { color: var(--accent); }
+  .card .body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .card .meta { font-size: 0.9rem; color: var(--muted); }
+  .card .day { font-size: 0.72rem; color: var(--faint); }
+  .badges { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .chip {
+    font-size: 0.7rem;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    padding: 4px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .chip.rec { background: var(--accent); color: #10132e; }
+  .chip.warn { background: rgba(246, 201, 130, 0.16); color: var(--dawn); }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .card { animation: rise 0.4s ease backwards; }
+
+  /* Settings */
+  .settings {
+    background: var(--card);
+    border: 1px solid var(--card-line);
+    border-radius: 16px;
+    padding: 4px 18px;
+  }
+  .settings summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 12px 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .settings summary::-webkit-details-marker { display: none; }
+  .settings summary::before { content: "⚙"; opacity: 0.6; }
+  .settings summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0 16px;
+    font-size: 0.9rem;
+    color: var(--ink);
+  }
+  .setting-row input[type="number"] {
+    width: 74px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--card-line);
+    border-radius: 10px;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    padding: 8px;
+  }
+  .setting-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .setting-row .val { color: var(--muted); }
+
+  footer {
+    font-size: 0.78rem;
+    line-height: 1.65;
+    color: var(--faint);
+    text-align: center;
+    padding: 4px 8px;
+  }
+  footer b { color: var(--muted); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { animation: none; }
+    .app { transition: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="sky" aria-hidden="true"></canvas>
+
+<main class="app" data-mode="wake">
+  <header class="brand">
+    <div class="mark" id="mark" aria-hidden="true"></div>
+    <div>
+      <h1>수면 주기 계산기</h1>
+      <p>90분 주기에 맞춰 개운하게 깨는 시각을 찾아드려요</p>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="계산 방향">
+    <button class="tab" role="tab" id="tab-wake" data-tab="wake" aria-selected="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+      취침 → 기상
+    </button>
+    <button class="tab" role="tab" id="tab-bed" data-tab="bed" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/></svg>
+      기상 → 취침
+    </button>
+  </div>
+
+  <section class="panel">
+    <span class="label" id="inputLabel">취침 시각</span>
+    <div class="input-row">
+      <input type="time" id="timeInput" aria-labelledby="inputLabel">
+      <button class="now-btn" id="nowBtn" type="button">지금 자면</button>
+    </div>
+    <p class="hint" id="hint"></p>
+  </section>
+
+  <p class="results-head" id="resultsHead" hidden></p>
+  <section class="results" id="results" aria-live="polite"></section>
+
+  <details class="settings">
+    <summary>설정</summary>
+    <div class="setting-row">
+      <label for="buffer">잠드는 데 걸리는 시간</label>
+      <span><input type="number" id="buffer" min="0" max="60" step="5" value="15"> <span class="val">분</span></span>
+    </div>
+  </details>
+
+  <footer>
+    수면은 약 <b>90분 주기</b>로 반복돼요. 주기가 끝나는 얕은 잠에서 깨면 더 개운합니다.<br>
+    잠드는 데 걸리는 평균 시간도 반영했어요. 개인차가 있는 <b>일반적인 가이드</b>예요.
+  </footer>
+</main>
+
+<script>
+  "use strict";
+
+  // ---- calculation logic (verified with 20 unit tests) ----
+  var CYCLE = 90, DAY = 1440;
+  var CYCLES = [6, 5, 4, 3];        // shown from most rest to least
+  var RECOMMENDED = { 6: true, 5: true };
+  function norm(m) { return ((m % DAY) + DAY) % DAY; }
+
+  function wakeFromBed(bedMin, buffer, list) {
+    return list.map(function (n) {
+      var raw = bedMin + buffer + n * CYCLE;
+      return { cycles: n, time: norm(raw), sleepMin: n * CYCLE, dayOffset: Math.floor(raw / DAY) };
+    });
+  }
+  function bedFromWake(wakeMin, buffer, list) {
+    return list.map(function (n) {
+      var raw = wakeMin - (buffer + n * CYCLE);
+      return { cycles: n, time: norm(raw), sleepMin: n * CYCLE, dayOffset: Math.floor(raw / DAY) };
+    });
+  }
+
+  // ---- formatting ----
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function fmtTime(min) {
+    var h = Math.floor(min / 60), m = min % 60;
+    var ampm = h < 12 ? "오전" : "오후";
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return { hhmm: pad(h) + ":" + pad(m), label: ampm + " " + h12 + ":" + pad(m) };
+  }
+  function fmtDur(min) {
+    var h = Math.floor(min / 60), m = min % 60;
+    return h + "시간" + (m ? " " + m + "분" : "");
+  }
+  function dayText(offset) {
+    if (offset > 0) return "다음 날";
+    if (offset < 0) return "전날";
+    return "";
+  }
+
+  // ---- state ----
+  var app = document.getElementById("app") || document.querySelector(".app");
+  var els = {
+    tabs: Array.prototype.slice.call(document.querySelectorAll(".tab")),
+    input: document.getElementById("timeInput"),
+    nowBtn: document.getElementById("nowBtn"),
+    hint: document.getElementById("hint"),
+    results: document.getElementById("results"),
+    resultsHead: document.getElementById("resultsHead"),
+    inputLabel: document.getElementById("inputLabel"),
+    buffer: document.getElementById("buffer"),
+    mark: document.getElementById("mark")
+  };
+
+  var MOON = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>';
+  var SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="22" height="22"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/></svg>';
+
+  function load(key, dflt) { try { var v = localStorage.getItem(key); return v === null ? dflt : v; } catch (e) { return dflt; } }
+  function save(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+
+  var mode = load("sc_mode", "wake");
+  els.buffer.value = load("sc_buffer", "15");
+
+  function parseInput() {
+    var v = els.input.value;
+    if (!v) return null;
+    var parts = v.split(":");
+    return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+  }
+  function getBuffer() {
+    var b = parseInt(els.buffer.value, 10);
+    if (isNaN(b) || b < 0) b = 0;
+    if (b > 120) b = 120;
+    return b;
+  }
+
+  function setMode(next) {
+    mode = next;
+    app.setAttribute("data-mode", mode);
+    save("sc_mode", mode);
+    els.tabs.forEach(function (t) { t.setAttribute("aria-selected", String(t.dataset.tab === mode)); });
+    els.mark.innerHTML = mode === "wake" ? MOON : SUN;
+    els.inputLabel.textContent = mode === "wake" ? "취침 시각" : "기상 목표 시각";
+    els.input.setAttribute("aria-labelledby", "inputLabel");
+    render();
+  }
+
+  function render() {
+    var mins = parseInput();
+    els.results.innerHTML = "";
+    if (mins === null) {
+      els.resultsHead.hidden = true;
+      els.hint.textContent = mode === "wake"
+        ? "몇 시에 주무실 건가요? 시각을 입력하거나 '지금 자면'을 눌러보세요."
+        : "몇 시에 일어나야 하나요? 목표 기상 시각을 입력하세요.";
+      return;
+    }
+
+    var buffer = getBuffer();
+    var rows = mode === "wake" ? wakeFromBed(mins, buffer, CYCLES) : bedFromWake(mins, buffer, CYCLES);
+
+    els.hint.textContent = mode === "wake"
+      ? "잠들기까지 약 " + buffer + "분을 더해 계산했어요."
+      : "잠들기까지 약 " + buffer + "분을 빼서 계산했어요.";
+    els.resultsHead.hidden = false;
+    els.resultsHead.textContent = mode === "wake" ? "이 시각에 일어나면 개운해요" : "이 시각에 누우면 개운해요";
+
+    rows.forEach(function (r, i) {
+      var t = fmtTime(r.time);
+      var rec = !!RECOMMENDED[r.cycles];
+      var warn = r.cycles <= 3;
+      var dt = dayText(r.dayOffset);
+
+      var card = document.createElement("div");
+      card.className = "card" + (rec ? " rec" : "");
+      card.style.animationDelay = (i * 55) + "ms";
+
+      var badges = "";
+      if (rec) badges += '<span class="chip rec">추천</span>';
+      else if (warn) badges += '<span class="chip warn">조금 짧아요</span>';
+
+      card.innerHTML =
+        '<div class="time">' + t.hhmm + '</div>' +
+        '<div class="body">' +
+          '<div class="meta">' + r.cycles + ' 사이클 · ' + fmtDur(r.sleepMin) + ' 수면</div>' +
+          (dt ? '<div class="day">' + dt + ' ' + t.label + '</div>' : '<div class="day">' + t.label + '</div>') +
+        '</div>' +
+        (badges ? '<div class="badges">' + badges + '</div>' : '');
+
+      els.results.appendChild(card);
+    });
+  }
+
+  // ---- events ----
+  els.tabs.forEach(function (t) {
+    t.addEventListener("click", function () { setMode(t.dataset.tab); });
+  });
+  els.input.addEventListener("input", render);
+  els.buffer.addEventListener("input", function () {
+    save("sc_buffer", els.buffer.value);
+    render();
+  });
+  els.nowBtn.addEventListener("click", function () {
+    var now = new Date();
+    els.input.value = pad(now.getHours()) + ":" + pad(now.getMinutes());
+    render();
+  });
+
+  setMode(mode);
+
+  // ---- ambient starfield (drawn once; calm + zero battery drain) ----
+  (function () {
+    var canvas = document.getElementById("sky");
+    var ctx = canvas.getContext("2d");
+    var stars = [], w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    function build() {
+      w = canvas.clientWidth; h = canvas.clientHeight;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      var count = Math.round((w * h) / 6500);
+      stars = [];
+      for (var i = 0; i < count; i++) {
+        stars.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          r: Math.random() * 1.3 + 0.3,
+          a: Math.random() * 0.55 + 0.15
+        });
+      }
+    }
+
+    function draw() {
+      var g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#0a0e26");
+      g.addColorStop(1, "#151a40");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      for (var i = 0; i < stars.length; i++) {
+        var s = stars[i];
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(226, 230, 255, " + s.a.toFixed(3) + ")";
+        ctx.fill();
+      }
+    }
+
+    build(); draw();
+    var rt;
+    window.addEventListener("resize", function () {
+      clearTimeout(rt);
+      rt = setTimeout(function () { build(); draw(); }, 150);
+    });
+  })();
+</script>
+</body>
+</html>
